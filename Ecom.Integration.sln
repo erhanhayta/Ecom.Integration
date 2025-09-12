@@ -1,9 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36429.23 d17.14
+VisualStudioVersion = 17.14.36429.23
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ecom.Api", "Ecom.Api\Ecom.Api.csproj", "{26A703D7-24F6-47AD-85AB-4BE1972D1B86}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ecom.Domain", "Ecom.Domain\Ecom.Domain.csproj", "{34A719B7-BCD4-49C9-AFF4-8AC916822BE8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ecom.Infrastructure", "Ecom.Infrastructure\Ecom.Infrastructure.csproj", "{0AA54070-1038-4E98-8B4E-4D34969A60C8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +19,14 @@ Global
 		{26A703D7-24F6-47AD-85AB-4BE1972D1B86}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{26A703D7-24F6-47AD-85AB-4BE1972D1B86}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{26A703D7-24F6-47AD-85AB-4BE1972D1B86}.Release|Any CPU.Build.0 = Release|Any CPU
+		{34A719B7-BCD4-49C9-AFF4-8AC916822BE8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34A719B7-BCD4-49C9-AFF4-8AC916822BE8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34A719B7-BCD4-49C9-AFF4-8AC916822BE8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34A719B7-BCD4-49C9-AFF4-8AC916822BE8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0AA54070-1038-4E98-8B4E-4D34969A60C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0AA54070-1038-4E98-8B4E-4D34969A60C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0AA54070-1038-4E98-8B4E-4D34969A60C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0AA54070-1038-4E98-8B4E-4D34969A60C8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
