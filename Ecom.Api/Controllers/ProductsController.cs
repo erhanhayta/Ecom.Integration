@@ -15,6 +15,7 @@ namespace Ecom.Api.Controllers
         string? Brand,
         decimal BasePrice,
         decimal TaxRate,
+        string? Description,
         bool IsActive,
         DateTime CreatedAtUtc
     );
@@ -44,6 +45,7 @@ namespace Ecom.Api.Controllers
                     p.Brand,
                     p.BasePrice,
                     p.TaxRate,
+                    p.Description,
                     p.IsActive,
                     p.CreatedAtUtc
                 ))
