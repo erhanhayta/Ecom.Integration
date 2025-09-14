@@ -8,51 +8,34 @@ namespace Ecom.Infrastructure.Data
         public EcomDbContext(DbContextOptions<EcomDbContext> options) : base(options) { }
 
         public DbSet<Product> Products => Set<Product>();
-        public DbSet<ProductVariant> Variants => Set<ProductVariant>(); 
+        public DbSet<ProductVariant> Variants => Set<ProductVariant>(); // DbSet<ProductVariant> ProductVariants da olur; tutarlı kullan
         public DbSet<MarketplaceShop> MarketplaceShops => Set<MarketplaceShop>();
         public DbSet<User> Users => Set<User>();
+        public DbSet<ProductImage> ProductImages => Set<ProductImage>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            base.OnModelCreating(modelBuilder);
+
             // === Product ===
             modelBuilder.Entity<Product>(b =>
             {
                 b.ToTable("Products");
                 b.HasKey(x => x.Id);
 
-                b.Property(x => x.Name)
-                 .IsRequired()
-                 .HasMaxLength(200);
+                b.Property(x => x.Name).IsRequired().HasMaxLength(200);
+                b.Property(x => x.ProductCode).IsRequired().HasMaxLength(64);
+                b.HasIndex(x => x.ProductCode).IsUnique();
 
-                b.Property(x => x.ProductCode)
-                 .IsRequired()
-                 .HasMaxLength(64);
+                b.Property(x => x.Barcode).IsRequired().HasMaxLength(64);
+                b.Property(x => x.Description).HasMaxLength(2000);
+                b.Property(x => x.Brand).HasMaxLength(128);
 
-                b.HasIndex(x => x.ProductCode)
-                 .IsUnique();
+                b.Property(x => x.BasePrice).HasColumnType("decimal(18,2)");
+                b.Property(x => x.TaxRate).HasColumnType("decimal(18,2)");
 
-                b.Property(x => x.Barcode)
-                 .IsRequired()
-                 .HasMaxLength(64);
-
-                b.Property(x => x.Description)
-                 .HasMaxLength(2000); // isteğe göre büyütülebilir
-
-                b.Property(x => x.Brand)
-                 .HasMaxLength(128);
-
-                b.Property(x => x.BasePrice)
-                 .HasColumnType("decimal(18,2)");
-
-                b.Property(x => x.TaxRate)
-                 .HasColumnType("decimal(18,2)");
-
-                b.Property(x => x.IsActive)
-                 .HasDefaultValue(true);
-
-                b.Property(x => x.CreatedAtUtc)
-                 .HasDefaultValueSql("GETUTCDATE()");
-
+                b.Property(x => x.IsActive).HasDefaultValue(true);
+                b.Property(x => x.CreatedAtUtc).HasDefaultValueSql("GETUTCDATE()");
                 b.Property(x => x.UpdatedAtUtc);
             });
 
@@ -66,7 +49,6 @@ namespace Ecom.Infrastructure.Data
                 b.Property(x => x.Size).IsRequired().HasMaxLength(64);
                 b.Property(x => x.Sku).IsRequired().HasMaxLength(64);
                 b.Property(x => x.Barcode).HasMaxLength(64);
-
                 b.Property(x => x.Price).HasColumnType("decimal(18,2)");
 
                 b.HasOne(x => x.Product)
@@ -74,11 +56,8 @@ namespace Ecom.Infrastructure.Data
                  .HasForeignKey(x => x.ProductId)
                  .OnDelete(DeleteBehavior.Cascade);
 
-                b.HasIndex(x => new { x.ProductId, x.Color, x.Size })
-                 .IsUnique();
-
-                b.HasIndex(x => x.Sku)
-                 .IsUnique();
+                b.HasIndex(x => new { x.ProductId, x.Color, x.Size }).IsUnique();
+                b.HasIndex(x => x.Sku).IsUnique();
             });
 
             // === MarketplaceShop ===
@@ -113,6 +92,29 @@ namespace Ecom.Infrastructure.Data
                 b.Property(x => x.IsActive).HasDefaultValue(true);
                 b.Property(x => x.CreatedAtUtc).HasDefaultValueSql("GETUTCDATE()");
             });
+
+            // ProductImage
+            modelBuilder.Entity<ProductImage>(b =>
+            {
+                b.ToTable("ProductImages");
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.Url).IsRequired().HasMaxLength(1024);
+                b.Property(x => x.FileName).IsRequired().HasMaxLength(255);
+
+                // Zorunlu: her resim bir ürüne bağlı
+                b.HasOne(pi => pi.Product)
+                 .WithMany(p => p.Images)
+                 .HasForeignKey(pi => pi.ProductId)
+                 .OnDelete(DeleteBehavior.Cascade);
+
+                // Opsiyonel: resim bir varyanta da bağlanabilir
+                b.HasOne(pi => pi.ProductVariant)
+                 .WithMany(v => v.Images)              // koleksiyon tutuyorsan WithMany(v => v.Images)
+                 .HasForeignKey(pi => pi.ProductVariantId)
+                 .OnDelete(DeleteBehavior.Restrict);   // <-- CASCADE değil; “multiple cascade paths” hatasını önler
+            });
+
         }
     }
 }
