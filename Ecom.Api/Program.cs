@@ -1,5 +1,7 @@
 using Ecom.Api.Services;
 using Ecom.Infrastructure.Data;
+using Ecom.Application.Marketplaces;
+using Ecom.Infrastructure.Marketplaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -16,21 +18,45 @@ builder.Services.AddControllers().AddJsonOptions(opts =>
     opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
 });
 
+// CORS (geliþtirme için spesifik origin)
+const string CorsPolicy = "FrontendPolicy";
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod());
+    options.AddPolicy(CorsPolicy, policy =>
+        policy
+            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials()
+    );
 });
+
+// Http & Cache
+builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("Trendyol", c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient("Hepsiburada", c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient("N11", c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddMemoryCache();
+
+// Marketplace catalog services (SCOPED)
+builder.Services.AddScoped<IMarketplaceCatalogService, TrendyolCatalogService>();
+builder.Services.AddScoped<IMarketplaceCatalogService, HepsiburadaCatalogService>();
+builder.Services.AddScoped<IMarketplaceCatalogService, N11CatalogService>();
+builder.Services.AddScoped<IMarketplaceCatalogServiceFactory, MarketplaceCatalogServiceFactory>();
+
+// Image processing service
+builder.Services.AddScoped<ImageProcessingService>();
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Ecom.Api", Version = "v1" });
+    c.SupportNonNullableReferenceTypes();
 
-    // JWT Bearer þemasý
+#if DEBUG
+
+#endif
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -38,7 +64,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Bearer {token} þeklinde girin. Örn: Bearer eyJhbGciOiJIUzI1NiIs..."
+        Description = "Bearer {token}"
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -46,11 +72,7 @@ builder.Services.AddSwaggerGen(c =>
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
             },
             Array.Empty<string>()
         }
@@ -61,10 +83,9 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddDbContext<EcomDbContext>(opt =>
     opt.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
-// JWT options
+// JWT
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
-// AuthN
 var jwtKey = builder.Configuration["Jwt:Key"]!;
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
 var jwtAudience = builder.Configuration["Jwt:Audience"]!;
@@ -87,7 +108,6 @@ builder.Services
         };
     });
 
-// AuthZ
 builder.Services.AddAuthorization();
 
 // Token service
@@ -101,9 +121,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseStaticFiles();
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
-app.UseAuthentication();  // <-- önemli
+app.UseCors(CorsPolicy);
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
