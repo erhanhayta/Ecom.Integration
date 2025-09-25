@@ -1,4 +1,5 @@
 ﻿using Ecom.Domain.Entities;
+using Ecom.Infrastructure.Data.Configurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecom.Infrastructure.Data
@@ -8,14 +9,25 @@ namespace Ecom.Infrastructure.Data
         public EcomDbContext(DbContextOptions<EcomDbContext> options) : base(options) { }
 
         public DbSet<Product> Products => Set<Product>();
-        public DbSet<ProductVariant> Variants => Set<ProductVariant>(); // DbSet<ProductVariant> ProductVariants da olur; tutarlı kullan
+        public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>(); // DbSet<ProductVariant> ProductVariants da olur; tutarlı kullan
         public DbSet<MarketplaceShop> MarketplaceShops => Set<MarketplaceShop>();
         public DbSet<User> Users => Set<User>();
         public DbSet<ProductImage> ProductImages => Set<ProductImage>();
+        public DbSet<MarketplaceProduct> MarketplaceProducts => Set<MarketplaceProduct>();
+        public DbSet<MarketplaceProductAttribute> MarketplaceProductAttributes => Set<MarketplaceProductAttribute>();
+        public DbSet<MarketplaceVariantAttribute> MarketplaceVariantAttributes => Set<MarketplaceVariantAttribute>();
+        public DbSet<MarketplaceAttributeMapping> MarketplaceAttributeMappings => Set<MarketplaceAttributeMapping>();
+
+
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.ApplyConfiguration(new MarketplaceProductConfiguration());
+            modelBuilder.ApplyConfiguration(new MarketplaceProductAttributeConfiguration());
+            modelBuilder.ApplyConfiguration(new MarketplaceVariantAttributeConfiguration());
+            modelBuilder.ApplyConfiguration(new MarketplaceAttributeMappingConfiguration());
 
             // === Product ===
             modelBuilder.Entity<Product>(b =>

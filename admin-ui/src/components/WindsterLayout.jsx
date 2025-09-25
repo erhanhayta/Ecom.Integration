@@ -17,7 +17,8 @@ export default function WindsterLayout({ children, title="Ecom Admin" }){
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <button onClick={()=>setOpen(true)} className="p-2 text-gray-600 rounded-lg hover:bg-gray-100 lg:hidden" aria-label="Open sidebar">☰</button>
-              <Link to="/products" className="ml-2 md:mr-24 text-xl font-semibold">{title}</Link>
+              {/* Başlık linkini /catalog'a aldım; istersen tekrar /products'a çevirebilirsin */}
+              <Link to="/catalog" className="ml-2 md:mr-24 text-xl font-semibold">{title}</Link>
             </div>
             <div className="flex items-center gap-3">
               <div className="hidden md:block">
@@ -35,13 +36,25 @@ export default function WindsterLayout({ children, title="Ecom Admin" }){
         <div className="h-full overflow-y-auto px-3 py-4">
           <ul className="space-y-1">
             <li>
-              <Link to="/products" onClick={()=>setOpen(false)}
+              <Link
+                to="/catalog"
+                onClick={()=>setOpen(false)}
+                className={`block rounded-lg px-3 py-2 text-sm ${isActive("/catalog")? "bg-blue-100 text-blue-700":"text-gray-700 hover:bg-gray-100"}`}>
+                🗂️ Trendyol Kategoriler
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/products"
+                onClick={()=>setOpen(false)}
                 className={`block rounded-lg px-3 py-2 text-sm ${isActive("/products")? "bg-blue-100 text-blue-700":"text-gray-700 hover:bg-gray-100"}`}>
                 📦 Products
               </Link>
             </li>
             <li>
-              <Link to="/shops" onClick={()=>setOpen(false)}
+              <Link
+                to="/shops"
+                onClick={()=>setOpen(false)}
                 className={`block rounded-lg px-3 py-2 text-sm ${isActive("/shops")? "bg-blue-100 text-blue-700":"text-gray-700 hover:bg-gray-100"}`}>
                 🏬 Shops
               </Link>

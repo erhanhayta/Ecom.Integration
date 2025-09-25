@@ -4,7 +4,10 @@ using Ecom.Domain.Entities;
 using Ecom.Domain.Marketplaces; // <<< ÖNEMLİ: enum burada
 using Microsoft.Extensions.Configuration;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Ecom.Infrastructure.Marketplaces
 {
@@ -17,6 +20,10 @@ namespace Ecom.Infrastructure.Marketplaces
         // Trendyol public kategori ağacı
         private const string CategoriesUrl =
             "https://apigw.trendyol.com/integration/product/product-categories";
+
+        // Trendyol marka listesi
+        private const string BrandsUrl =
+            "https://apigw.trendyol.com/integration/product/brands";
 
         // Sizin enum: Trendyol / Hepsiburada / N11
         public Firm Firm => Firm.Trendyol;
@@ -67,6 +74,19 @@ namespace Ecom.Infrastructure.Marketplaces
                         yield return x;
         }
 
+        private static void ApplyShopAuthAndBase(HttpClient client, MarketplaceShop shop)
+        {
+            var baseUrl = string.IsNullOrWhiteSpace(shop.BaseUrl)
+                ? "https://apigw.trendyol.com"
+                : shop.BaseUrl.TrimEnd('/');
+
+            client.BaseAddress = new Uri(baseUrl);
+
+            // Trendyol Basic Auth: base64(apiKey:apiSecret)
+            var creds = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{shop.ApiKey}:{shop.ApiSecret}"));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", creds);
+        }
+
         public async Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(
             MarketplaceShop shop,
             int? parentId,
@@ -109,34 +129,61 @@ namespace Ecom.Infrastructure.Marketplaces
 
             // CategoryDto(int id, string name, int? parentId, bool hasChildren)
             return source
-                .Select(s => new CategoryDto(s.Id, s.Name, s.ParentId, s.SubCategories != null && s.SubCategories.Count > 0))
+                .Select(s => new CategoryDto(
+                    s.Id,
+                    s.Name,
+                    s.ParentId,
+                    s.SubCategories != null && s.SubCategories.Count > 0))
                 .ToList();
         }
 
-        public Task<IReadOnlyList<CategoryAttributeDto>> GetCategoryAttributesAsync(
+        public async Task<IReadOnlyList<CategoryAttributeDto>> GetCategoryAttributesAsync(
             MarketplaceShop shop,
             int categoryId,
             CancellationToken ct)
         {
-            // Trendyol kategori özellikleri için ayrı endpoint gerekir.
-            // Şimdilik boş liste (UI bu durumda “özellik yok” şeklinde davranabilir).
-            return Task.FromResult<IReadOnlyList<CategoryAttributeDto>>(Array.Empty<CategoryAttributeDto>());
+            using var client = CreateClient();
+            ApplyShopAuthAndBase(client, shop);
+
+            var path = $"/integration/product/product-categories/{categoryId}/attributes";
+
+            using var resp = await client.GetAsync(path, ct);
+            resp.EnsureSuccessStatusCode();
+
+            var payload = await resp.Content.ReadFromJsonAsync<TrendyolCategoryAttributesResponse>(_json, ct)
+                          ?? new TrendyolCategoryAttributesResponse();
+
+            var list = (payload.CategoryAttributes ?? new List<TrendyolCategoryAttributeRow>())
+                .Select(row => new CategoryAttributeDto(
+                    AttributeId: row.Attribute?.Id ?? 0,
+                    Name: row.Attribute?.Name ?? string.Empty,
+                    Required: row.Required,
+                    AllowCustom: row.AllowCustom,
+                    Varianter: row.Varianter,
+                    Slicer: row.Slicer,
+                    Values: (row.AttributeValues ?? new List<TrendyolAttributeValueRow>())
+                                .Select(v => new CategoryAttributeValueDto(v.Id, v.Name ?? string.Empty))
+                                .ToList()
+                ))
+                .ToList();
+
+            return list;
         }
 
         public async Task<IReadOnlyList<BrandDto>> GetBrandsAsync(
-        MarketplaceShop shop, string? query, CancellationToken ct)
+            MarketplaceShop shop, string? query, CancellationToken ct)
         {
             using var client = CreateClient();
+            ApplyShopAuthAndBase(client, shop);
 
-            // Not: Trendyol tarafı Cloudflare koruması uygulayabiliyor.
-            // Eğer 556 / 403 alırsan appsettings'te "Trendyol:Cookie" tanımlayıp buradan header ekle.
+            // (Opsiyonel) Cloudflare engeli için cookie
             var cookie = _config["Trendyol:Cookie"];
             if (!string.IsNullOrWhiteSpace(cookie))
                 client.DefaultRequestHeaders.Add("Cookie", cookie);
 
-            var url = "https://apigw.trendyol.com/integration/product/brands";
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            using var resp = await client.SendAsync(req, ct);
+            // Absolute kullanmak yerine BaseAddress + relative path de kullanılabilir.
+            var path = "/integration/product/brands";
+            using var resp = await client.GetAsync(path, ct);
 
             if (!resp.IsSuccessStatusCode)
             {
@@ -148,7 +195,7 @@ namespace Ecom.Infrastructure.Marketplaces
             var data = await JsonSerializer.DeserializeAsync<TrendyolBrandsResponse>(stream, _json, ct)
                        ?? new TrendyolBrandsResponse();
 
-            IEnumerable<TrendyolBrandRow> src = data.Brands ?? new();
+            IEnumerable<TrendyolBrandRow> src = data.Brands ?? Enumerable.Empty<TrendyolBrandRow>();
 
             if (!string.IsNullOrWhiteSpace(query))
             {
@@ -156,14 +203,65 @@ namespace Ecom.Infrastructure.Marketplaces
                 src = src.Where(b => (b.Name ?? "").ToLowerInvariant().Contains(t));
             }
 
-            return src.Select(b => new BrandDto(b.Id, b.Name)).ToList();
+            return src.Select(b => new BrandDto(b.Id, b.Name ?? string.Empty)).ToList();
         }
 
-        // ---- dosyanın üst kısmındaki private DTO'lara ekle:
+        // ---- Response modelleri ----
         private sealed class TrendyolBrandsResponse
         {
             public List<TrendyolBrandRow> Brands { get; set; } = new();
         }
 
+        private sealed class TrendyolCategoryAttributesResponse
+        {
+            [JsonPropertyName("id")]
+            public int Id { get; set; }
+            [JsonPropertyName("name")]
+            public string? Name { get; set; }
+            [JsonPropertyName("displayName")]
+            public string? DisplayName { get; set; }
+            [JsonPropertyName("categoryAttributes")]
+            public List<TrendyolCategoryAttributeRow>? CategoryAttributes { get; set; }
+        }
+
+        private sealed class TrendyolCategoryAttributeRow
+        {
+            [JsonPropertyName("categoryId")]
+            public int CategoryId { get; set; }
+
+            [JsonPropertyName("attribute")]
+            public TrendyolAttributeMeta? Attribute { get; set; }
+
+            [JsonPropertyName("required")]
+            public bool Required { get; set; }
+
+            [JsonPropertyName("allowCustom")]
+            public bool AllowCustom { get; set; }
+
+            [JsonPropertyName("varianter")]
+            public bool Varianter { get; set; }
+
+            [JsonPropertyName("slicer")]
+            public bool Slicer { get; set; }
+
+            [JsonPropertyName("attributeValues")]
+            public List<TrendyolAttributeValueRow>? AttributeValues { get; set; }
+        }
+
+        private sealed class TrendyolAttributeMeta
+        {
+            [JsonPropertyName("id")]
+            public int Id { get; set; }
+            [JsonPropertyName("name")]
+            public string? Name { get; set; }
+        }
+
+        private sealed class TrendyolAttributeValueRow
+        {
+            [JsonPropertyName("id")]
+            public int Id { get; set; }
+            [JsonPropertyName("name")]
+            public string? Name { get; set; }
+        }
     }
 }
