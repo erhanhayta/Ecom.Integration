@@ -21,7 +21,7 @@ namespace Ecom.Api.Controllers
             var exists = await _db.Products.AnyAsync(p => p.Id == productId);
             if (!exists) return NotFound("Product not found.");
 
-            var list = await _db.Variants
+            var list = await _db.ProductVariants
                 .AsNoTracking()
                 .Where(v => v.ProductId == productId)
                 .ToListAsync();
@@ -33,7 +33,7 @@ namespace Ecom.Api.Controllers
         [HttpGet("variants/{id:guid}")]
         public async Task<IActionResult> Get(Guid id)
         {
-            var v = await _db.Variants.FindAsync(id);
+            var v = await _db.ProductVariants.FindAsync(id);
             return v is null ? NotFound() : Ok(v);
         }
 
@@ -47,7 +47,7 @@ namespace Ecom.Api.Controllers
             if (product is null) return NotFound("Product not found.");
 
             // İsteğe bağlı: Aynı kombinasyonu proaktif kontrol et (unique index zaten korur)
-            var duplicate = await _db.Variants.AnyAsync(x =>
+            var duplicate = await _db.ProductVariants.AnyAsync(x =>
                 x.ProductId == productId && x.Color == req.Color && x.Size == req.Size);
             if (duplicate) return Conflict("This Color/Size combination already exists for the product.");
 
@@ -64,7 +64,7 @@ namespace Ecom.Api.Controllers
                 IsActive = req.IsActive
             };
 
-            _db.Variants.Add(entity);
+            _db.ProductVariants.Add(entity);
             await _db.SaveChangesAsync();
 
             return CreatedAtAction(nameof(Get), new { id = entity.Id }, entity);
@@ -76,7 +76,7 @@ namespace Ecom.Api.Controllers
         [HttpPut("variants/{id:guid}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UpdateVariantRequest req)
         {
-            var entity = await _db.Variants.FindAsync(id);
+            var entity = await _db.ProductVariants.FindAsync(id);
             if (entity is null) return NotFound();
 
             entity.Color = req.Color;
@@ -88,7 +88,7 @@ namespace Ecom.Api.Controllers
             entity.IsActive = req.IsActive;
 
             // Aynı ürün içinde (Color,Size) çakışması kontrolü
-            var clash = await _db.Variants.AnyAsync(x =>
+            var clash = await _db.ProductVariants.AnyAsync(x =>
                 x.Id != id && x.ProductId == entity.ProductId &&
                 x.Color == entity.Color && x.Size == entity.Size);
             if (clash) return Conflict("Another variant with same Color/Size already exists for this product.");
@@ -101,10 +101,10 @@ namespace Ecom.Api.Controllers
         [HttpDelete("variants/{id:guid}")]
         public async Task<IActionResult> Delete(Guid id)
         {
-            var entity = await _db.Variants.FindAsync(id);
+            var entity = await _db.ProductVariants.FindAsync(id);
             if (entity is null) return NotFound();
 
-            _db.Variants.Remove(entity);
+            _db.ProductVariants.Remove(entity);
             await _db.SaveChangesAsync();
             return NoContent();
         }

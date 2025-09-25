@@ -1,6 +1,6 @@
 ﻿using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Metadata.Profiles.Exif;
+using SixLabors.ImageSharp.Metadata;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -8,34 +8,50 @@ namespace Ecom.Api.Services
 {
     public class ImageProcessingService
     {
-        public async Task ProcessAndSaveAsync(Stream input, string outPath, int width = 1200, int height = 1800, int quality = 85, CancellationToken ct = default)
+        /// <summary>
+        /// Görseli oku, EXIF orientation düzelt, 1200x1800'e pad'le, DPI=96 yaz, JPEG olarak kaydet.
+        /// </summary>
+        public async Task ProcessAndSaveAsync(
+            Stream input,
+            string absolutePath,
+            int targetWidth,
+            int targetHeight,
+            int jpegQuality,
+            CancellationToken ct)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
+            input.Position = 0;
 
             using var image = await Image.LoadAsync<Rgba32>(input, ct);
 
-            // Canvas: 1200x1800, beyaz arkaplan
-            using var canvas = new Image<Rgba32>(width, height, Color.White);
+            // EXIF orientation normalle
+            image.Mutate(x => x.AutoOrient());
 
-            // Resmi canvas içine sığdır (aspect protect)
-            var ratio = Math.Min((double)width / image.Width, (double)height / image.Height);
-            var newW = (int)Math.Round(image.Width * ratio);
-            var newH = (int)Math.Round(image.Height * ratio);
+            // 1200x1800 içine sığdır ve pad ile beyaz zeminle tamamla
+            var bg = Color.White;
+            var resizeOpts = new ResizeOptions
+            {
+                Size = new Size(targetWidth, targetHeight),
+                Mode = ResizeMode.Pad,
+                Position = AnchorPositionMode.Center,
+                Sampler = KnownResamplers.Bicubic,
+                PremultiplyAlpha = true,
+                PadColor = bg
+            };
 
-            image.Mutate(x => x.Resize(new Size(newW, newH)));
+            image.Mutate(x => x.Resize(resizeOpts).BackgroundColor(bg));
 
-            // ortala
-            var posX = (width - newW) / 2;
-            var posY = (height - newH) / 2;
+            // 96 DPI yaz
+            var meta = image.Metadata ?? new ImageMetadata();
+            meta.HorizontalResolution = 96;
+            meta.VerticalResolution = 96;
 
-            canvas.Mutate(x => x.DrawImage(image, new Point(posX, posY), 1f));
+            // Klasörü oluştur
+            var dir = Path.GetDirectoryName(absolutePath)!;
+            Directory.CreateDirectory(dir);
 
-            // 96 DPI
-            canvas.Metadata.VerticalResolution = 96;
-            canvas.Metadata.HorizontalResolution = 96;
-
-            var encoder = new JpegEncoder { Quality = quality };
-            await canvas.SaveAsync(outPath, encoder, ct);
+            // JPEG olarak kaydet (quality)
+            var encoder = new JpegEncoder { Quality = jpegQuality };
+            await image.SaveAsJpegAsync(absolutePath, encoder, ct);
         }
     }
 }
