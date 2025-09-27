@@ -20,7 +20,7 @@ namespace Ecom.Api.Controllers
         DateTime CreatedAtUtc
     );
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,admin")]
     [ApiController]
     [Route("admin/[controller]")]
     public class ProductsController : ControllerBase

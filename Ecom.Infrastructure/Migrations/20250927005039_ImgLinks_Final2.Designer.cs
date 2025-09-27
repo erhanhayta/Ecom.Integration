@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Ecom.Infrastructure.Migrations
 {
     [DbContext(typeof(EcomDbContext))]
-    [Migration("20250914021422_Init")]
-    partial class Init
+    [Migration("20250927005039_ImgLinks_Final2")]
+    partial class ImgLinks_Final2
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -24,6 +24,127 @@ namespace Ecom.Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+
+            modelBuilder.Entity("Ecom.Domain.Entities.MarketplaceAttributeMapping", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AttributeId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Firm")
+                        .HasColumnType("int");
+
+                    b.Property<string>("LocalField")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Firm", "AttributeId")
+                        .IsUnique();
+
+                    b.ToTable("MarketplaceAttributeMappings", (string)null);
+                });
+
+            modelBuilder.Entity("Ecom.Domain.Entities.MarketplaceProduct", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CategoryName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("CategoryPath")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<int>("Firm")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ShopId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("ProductId", "ShopId", "Firm")
+                        .IsUnique();
+
+                    b.ToTable("MarketplaceProducts", (string)null);
+                });
+
+            modelBuilder.Entity("Ecom.Domain.Entities.MarketplaceProductAttribute", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AllowCustom")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("AttributeId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AttributeName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<Guid>("MarketplaceProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Required")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("Slicer")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("ValueId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ValueName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("Varianter")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MarketplaceProductId", "AttributeId");
+
+                    b.ToTable("MarketplaceProductAttributes", (string)null);
+                });
 
             modelBuilder.Entity("Ecom.Domain.Entities.MarketplaceShop", b =>
                 {
@@ -83,6 +204,41 @@ namespace Ecom.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("MarketplaceShops", (string)null);
+                });
+
+            modelBuilder.Entity("Ecom.Domain.Entities.MarketplaceVariantAttribute", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AttributeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
+
+                    b.Property<Guid>("MarketplaceProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProductVariantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("ValueId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ValueName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MarketplaceProductId", "ProductVariantId", "AttributeId")
+                        .IsUnique();
+
+                    b.ToTable("MarketplaceVariantAttributes", (string)null);
                 });
 
             modelBuilder.Entity("Ecom.Domain.Entities.Product", b =>
@@ -181,6 +337,47 @@ namespace Ecom.Infrastructure.Migrations
                     b.ToTable("ProductImages", (string)null);
                 });
 
+            modelBuilder.Entity("Ecom.Domain.Entities.ProductImageLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsMain")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProductImageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ProductVariantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductImageId");
+
+                    b.HasIndex("ProductVariantId");
+
+                    b.HasIndex("ProductId", "ProductImageId", "ProductVariantId")
+                        .IsUnique()
+                        .HasFilter("[ProductVariantId] IS NOT NULL");
+
+                    b.ToTable("ProductImageLinks", (string)null);
+                });
+
             modelBuilder.Entity("Ecom.Domain.Entities.ProductVariant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -188,7 +385,6 @@ namespace Ecom.Infrastructure.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Barcode")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
@@ -272,6 +468,24 @@ namespace Ecom.Infrastructure.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("Ecom.Domain.Entities.MarketplaceProductAttribute", b =>
+                {
+                    b.HasOne("Ecom.Domain.Entities.MarketplaceProduct", null)
+                        .WithMany("Attributes")
+                        .HasForeignKey("MarketplaceProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Ecom.Domain.Entities.MarketplaceVariantAttribute", b =>
+                {
+                    b.HasOne("Ecom.Domain.Entities.MarketplaceProduct", null)
+                        .WithMany()
+                        .HasForeignKey("MarketplaceProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Ecom.Domain.Entities.ProductImage", b =>
                 {
                     b.HasOne("Ecom.Domain.Entities.Product", "Product")
@@ -290,6 +504,20 @@ namespace Ecom.Infrastructure.Migrations
                     b.Navigation("ProductVariant");
                 });
 
+            modelBuilder.Entity("Ecom.Domain.Entities.ProductImageLink", b =>
+                {
+                    b.HasOne("Ecom.Domain.Entities.ProductImage", null)
+                        .WithMany()
+                        .HasForeignKey("ProductImageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecom.Domain.Entities.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Ecom.Domain.Entities.ProductVariant", b =>
                 {
                     b.HasOne("Ecom.Domain.Entities.Product", "Product")
@@ -299,6 +527,11 @@ namespace Ecom.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("Ecom.Domain.Entities.MarketplaceProduct", b =>
+                {
+                    b.Navigation("Attributes");
                 });
 
             modelBuilder.Entity("Ecom.Domain.Entities.Product", b =>

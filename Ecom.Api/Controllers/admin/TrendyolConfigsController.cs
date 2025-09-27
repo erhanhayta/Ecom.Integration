@@ -1,4 +1,6 @@
-﻿using Ecom.Domain.Entities;
+﻿using Ecom.Application.Marketplaces;
+using Ecom.Domain.Entities;
+using Ecom.Domain.Marketplaces;
 using Ecom.Infrastructure.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +30,8 @@ namespace Ecom.Api.Controllers.admin
         {
             public int CategoryId { get; set; }
             public string? CategoryName { get; set; }
+
+            public string? SelectedPath { get; set; }
             public List<TyAttrDto> Attributes { get; set; } = new();
         }
 
@@ -50,6 +54,7 @@ namespace Ecom.Api.Controllers.admin
                     Firm = (int)Ecom.Domain.Marketplaces.Firm.Trendyol,
                     CategoryId = dto.CategoryId,
                     CategoryName = dto.CategoryName,
+                    CategoryPath = dto.SelectedPath
                 };
                 _db.MarketplaceProducts.Add(mp);
             }
@@ -57,6 +62,7 @@ namespace Ecom.Api.Controllers.admin
             {
                 mp.CategoryId = dto.CategoryId;
                 mp.CategoryName = dto.CategoryName;
+                mp.CategoryPath = dto.SelectedPath;
                 mp.UpdatedAtUtc = DateTime.UtcNow;
 
                 var old = _db.MarketplaceProductAttributes.Where(a => a.MarketplaceProductId == mp.Id);
@@ -69,6 +75,7 @@ namespace Ecom.Api.Controllers.admin
                 {
                     Id = Guid.NewGuid(),
                     MarketplaceProductId = mp.Id,
+                    CategoryId = dto.CategoryId,
                     AttributeId = a.AttributeId,
                     AttributeName = a.AttributeName,
                     ValueId = a.AllowCustom ? null : a.ValueId,
@@ -103,6 +110,7 @@ namespace Ecom.Api.Controllers.admin
                 marketplaceProductId = mp.Id,
                 categoryId = mp.CategoryId,
                 categoryName = mp.CategoryName,
+                categoryPath = mp.CategoryPath,
                 attributes = attrs.Select(x => new
                 {
                     x.AttributeId,
@@ -117,64 +125,72 @@ namespace Ecom.Api.Controllers.admin
             });
         }
 
-        // Bizdeki varyantlara göre varianter eşleşmelerini üret
+        // TrendyolConfigsController.cs  (POST /admin/ty/{shopId}/products/{productId}/map-variants)
+
         [HttpPost("map-variants")]
         public async Task<IActionResult> MapVariants(Guid shopId, Guid productId, CancellationToken ct)
         {
             var mp = await _db.MarketplaceProducts
-                .FirstOrDefaultAsync(x => x.ProductId == productId
-                                       && x.ShopId == shopId
-                                       && x.Firm == (int)Ecom.Domain.Marketplaces.Firm.Trendyol, ct);
+                .FirstOrDefaultAsync(x => x.ProductId == productId && x.ShopId == shopId, ct);
             if (mp == null) return BadRequest("TY config not found");
 
-            var varAttrs = await _db.MarketplaceProductAttributes.AsNoTracking()
-                .Where(x => x.MarketplaceProductId == mp.Id && x.Varianter)
-                .ToListAsync(ct);
+            var shop = await _db.MarketplaceShops.FirstAsync(s => s.Id == shopId, ct);
+            var catalog = HttpContext.RequestServices
+                .GetRequiredService<IEnumerable<IMarketplaceCatalogService>>()
+                .First(s => s.Firm == Firm.Trendyol);
 
-            // Default: Renk=47, Beden=338 (isimden bulma fallback)
-            int? colorAttrId = varAttrs.FirstOrDefault(a => a.AttributeId == 47)?.AttributeId
-                            ?? varAttrs.FirstOrDefault(a => (a.AttributeName ?? "").Contains("Renk", StringComparison.OrdinalIgnoreCase))?.AttributeId;
+            // TY attribute listesini çek → beden için ValueId eşleyeceğiz
+            var tyAttrs = await catalog.GetCategoryAttributesAsync(shop, mp.CategoryId, ct);
+            var colorAttr = tyAttrs.FirstOrDefault(a => a.AttributeId == 47
+                             || a.Name.Contains("Renk", StringComparison.OrdinalIgnoreCase));
+            var sizeAttr = tyAttrs.FirstOrDefault(a => a.AttributeId == 338
+                             || a.Name.Contains("Beden", StringComparison.OrdinalIgnoreCase));
 
-            int? sizeAttrId = varAttrs.FirstOrDefault(a => a.AttributeId == 338)?.AttributeId
-                            ?? varAttrs.FirstOrDefault(a => (a.AttributeName ?? "").Contains("Beden", StringComparison.OrdinalIgnoreCase))?.AttributeId;
+            var sizeValueMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            if (sizeAttr != null)
+                foreach (var v in sizeAttr.Values)
+                    sizeValueMap[v.Name ?? ""] = v.Id;
 
             var variants = await _db.ProductVariants
                 .Where(v => v.ProductId == productId && v.IsActive)
                 .ToListAsync(ct);
 
-            var old = _db.MarketplaceVariantAttributes.Where(x => x.MarketplaceProductId == mp.Id);
-            _db.MarketplaceVariantAttributes.RemoveRange(old);
+            _db.MarketplaceVariantAttributes.RemoveRange(
+                _db.MarketplaceVariantAttributes.Where(x => x.MarketplaceProductId == mp.Id));
 
             foreach (var v in variants)
             {
-                if (colorAttrId.HasValue)
+                if (colorAttr != null)
                 {
+                    // Renk çoğunlukla allowCustom → ValueName yaz, ValueId boş
                     _db.MarketplaceVariantAttributes.Add(new MarketplaceVariantAttribute
                     {
                         Id = Guid.NewGuid(),
                         MarketplaceProductId = mp.Id,
                         ProductVariantId = v.Id,
-                        AttributeId = colorAttrId.Value,
-                        ValueId = null,            // allowCustom:true kabul
+                        AttributeId = colorAttr.AttributeId,
+                        ValueId = null,
                         ValueName = v.Color ?? ""
                     });
                 }
-                if (sizeAttrId.HasValue)
+
+                if (sizeAttr != null)
                 {
+                    sizeValueMap.TryGetValue(v.Size ?? "", out var tyValId);
                     _db.MarketplaceVariantAttributes.Add(new MarketplaceVariantAttribute
                     {
                         Id = Guid.NewGuid(),
                         MarketplaceProductId = mp.Id,
                         ProductVariantId = v.Id,
-                        AttributeId = sizeAttrId.Value,
-                        ValueId = null,            // ileride TY ValueId eşlemesi eklenebilir
-                        ValueName = v.Size ?? ""
+                        AttributeId = sizeAttr.AttributeId,
+                        ValueId = tyValId != 0 ? tyValId : (int?)null, // eşleştiyse Id yaz
+                        ValueName = tyValId != 0 ? null : (v.Size ?? "") // eşleşmediyse free text
                     });
                 }
             }
 
             await _db.SaveChangesAsync(ct);
-            return Ok(new { marketplaceProductId = mp.Id, mappedVariants = variants.Count, colorAttrId, sizeAttrId });
+            return Ok(new { mapped = variants.Count });
         }
     }
 }

@@ -10,6 +10,7 @@ namespace Ecom.Domain.Entities
     {
         public Guid Id { get; set; }
         public Guid MarketplaceProductId { get; set; }
+        public int CategoryId { get; set; }
         public int AttributeId { get; set; }
         public string? AttributeName { get; set; }
         public int? ValueId { get; set; }

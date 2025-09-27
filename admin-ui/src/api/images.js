@@ -1,30 +1,43 @@
-// src/api/images.js
 import { api } from "./client";
 
-/** Tek dosya upload (form-data) */
-export async function uploadProductImageFile(productId, file, { variantId, sortOrder, isMain } = {}) {
+// 1) Tek dosya upload → { imageId, url }
+export async function uploadProductImageFile(productId, file, { sortOrder=0, isMain=false, linkToProduct=false } = {}) {
   const fd = new FormData();
   fd.append("file", file);
-  if (sortOrder !== undefined) fd.append("sortOrder", String(sortOrder));
-  if (isMain !== undefined) fd.append("isMain", String(isMain));
-  const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : "";
-  return api(`/admin/products/${productId}/images${q}`, { method: "POST", body: fd });
+  const qs = new URLSearchParams({ sortOrder, isMain, linkToProduct });
+  return api(`/admin/products/${productId}/images?${qs.toString()}`, {
+    method: "POST",
+    body: fd, // Content-Type’ı client.js ayarlamayacak; browser boundary’yi koyacak
+  });
 }
 
-export async function uploadProductImageFilesBulk(productId, files, { variantId, sortOrder, isMain } = {}) {
-  const fd = new FormData();
-  for (const f of files) fd.append("files", f);
-  if (sortOrder !== undefined) fd.append("sortOrder", String(sortOrder));
-  if (isMain !== undefined) fd.append("isMain", String(isMain));
-  const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : "";
-  return api(`/admin/products/${productId}/images/bulk${q}`, { method: "POST", body: fd });
+
+// 2) Birden çok dosya yükle (tek tek çağırıp imageId listesi döner)
+export async function uploadProductImageFilesBulk(productId, files, opts) {
+  const out = [];
+  for (const f of files) {
+    const r = await uploadProductImageFile(productId, f, opts);
+    out.push(r.imageId);
+  }
+  return out; // imageId listesi
 }
 
+// 3) Link oluştur (çoğaltma)
+export async function linkImages(productId, { imageIds, linkToProduct=false, variantIds=[], sortOrder=0, isMain=false }) {
+  return api(`/admin/products/${productId}/images/links`, {
+    method: "POST",
+    body: JSON.stringify({ imageIds, linkToProduct, variantIds, sortOrder, isMain })
+  });
+}
+
+// 4) Liste (ürün/variant)
 export async function listProductImages(productId, { variantId } = {}) {
-  const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : "";
-  return api(`/admin/products/${productId}/images${q}`);
+  const qs = new URLSearchParams();
+  if (variantId) qs.set("variantId", variantId);
+  return api(`/admin/products/${productId}/images${qs.toString() ? `?${qs}` : ""}`);
 }
 
-export async function deleteProductImage(productId, imageId) {
-  return api(`/admin/products/${productId}/images/${imageId}`, { method: "DELETE" });
+// 5) Link sil
+export async function deleteProductImageLink(productId, linkId) {
+  return api(`/admin/products/${productId}/images/links/${linkId}`, { method: "DELETE" });
 }

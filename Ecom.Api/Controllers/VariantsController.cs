@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ecom.Api.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,admin")]
     [ApiController]
     [Route("admin")]
     public class VariantsController : ControllerBase
@@ -107,6 +107,54 @@ namespace Ecom.Api.Controllers
             _db.ProductVariants.Remove(entity);
             await _db.SaveChangesAsync();
             return NoContent();
+        }
+
+        [HttpPatch("products/{productId:guid}/variants/{variantId:guid}")]
+        public async Task<IActionResult> UpdatePartial(Guid productId, Guid variantId, [FromBody] VariantUpdateDto dto, CancellationToken ct)
+        {
+            var v = await _db.ProductVariants.FirstOrDefaultAsync(x => x.Id == variantId && x.ProductId == productId, ct);
+            if (v == null) return NotFound();
+
+            if (dto.Price.HasValue) v.Price = dto.Price.Value;
+            if (dto.Stock.HasValue) v.Stock = dto.Stock.Value;
+            if (dto.IsActive.HasValue) v.IsActive = dto.IsActive.Value;
+
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { v.Id, v.Price, v.Stock, v.IsActive });
+        }
+
+        [HttpPost("products/{productId:guid}/variants/bulk-price")]
+        public async Task<IActionResult> BulkPrice(Guid productId, [FromBody] BulkPriceRequest req, CancellationToken ct)
+        {
+            // scope
+            var q = _db.ProductVariants.Where(v => v.ProductId == productId);
+            if (!string.IsNullOrWhiteSpace(req.Color))
+                q = q.Where(v => v.Color == req.Color);
+            if (!string.IsNullOrWhiteSpace(req.Size))
+                q = q.Where(v => v.Size == req.Size);
+
+            var list = await q.ToListAsync(ct);
+
+            foreach (var v in list)
+            {
+                switch (req.Op) // set, inc, dec, incp, decp
+                {
+                    case "set": v.Price = req.Value; break;
+                    case "inc": v.Price += req.Value; break;
+                    case "dec": v.Price -= req.Value; break;
+                    case "incp": v.Price += v.Price * (req.Value / 100m); break;
+                    case "decp": v.Price -= v.Price * (req.Value / 100m); break;
+                }
+            }
+            await _db.SaveChangesAsync(ct);
+            return Ok(new { updated = list.Count });
+        }
+        public record BulkPriceRequest(string? Color, string? Size, string Op, decimal Value);
+        public sealed class VariantUpdateDto
+        {
+            public decimal? Price { get; set; }
+            public int? Stock { get; set; }
+            public bool? IsActive { get; set; }
         }
     }
 }

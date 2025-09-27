@@ -14,7 +14,7 @@ namespace Ecom.Infrastructure.Data.Configurations
             b.Property(x => x.AttributeName).HasMaxLength(200);
             b.Property(x => x.ValueName).HasMaxLength(200);
             b.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
-
+            b.Property(x => x.CategoryId).IsRequired();
             b.HasIndex(x => new { x.MarketplaceProductId, x.AttributeId });
 
             b.HasOne<MarketplaceProduct>()

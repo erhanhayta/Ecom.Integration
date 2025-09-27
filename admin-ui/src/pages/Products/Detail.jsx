@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import WindsterLayout from "../../components/WindsterLayout";
 import { api } from "../../api/client";
+import { patchVariant } from "../../api/variants";   // <-- EKLE
 import TrendyolCategoryMapper from "./TrendyolCategoryMapper";
 import VariantBulkAdd from "./VariantBulkAdd";
 import VariantImageBulkAdd from "./VariantImageBulkAdd";
 import ProductImages from "./ProductImages";
+import BulkPriceModal from "./BulkPriceModal";  // <-- EKLE
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -13,6 +15,9 @@ export default function ProductDetail() {
   const [data, setData] = useState(null);
   const [msg, setMsg] = useState("");
   const [imagesKey, setImagesKey] = useState(0); // galeri yenileme tetikleyici
+  const [bulkOpen, setBulkOpen] = useState(false); // +++ modal state
+  const saveVariant = (pid, vid, payload) =>
+    api(`/admin/products/${pid}/variants/${vid}`, { method: "PATCH", body: payload });  
 
   const [tyState, setTyState] = useState(null);
   // const [variantState, setVariantState] = useState(null);
@@ -90,8 +95,7 @@ export default function ProductDetail() {
                         <th className="px-3 py-2">SKU</th>
                         <th className="px-3 py-2">Barkod</th>
                         <th className="px-3 py-2">Stok</th>
-                        <th className="px-3 py-2">Satış</th>
-                        <th className="px-3 py-2">Liste</th>
+                        <th className="px-3 py-2">Satış Fiyatı</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -100,10 +104,30 @@ export default function ProductDetail() {
                           <td className="px-3 py-2">{v.color}</td>
                           <td className="px-3 py-2">{v.size}</td>
                           <td className="px-3 py-2">{v.sku}</td>
-                          <td className="px-3 py-2">{v.barcode}</td>
-                          <td className="px-3 py-2">{v.stock}</td>
-                          <td className="px-3 py-2">{v.salePrice ?? v.price ?? "-"}</td>
-                          <td className="px-3 py-2">{v.listPrice ?? "-"}</td>
+                          <td className="px-3 py-2">{v.barcode}</td>                          
+                          <td className="px-3 py-2">
+                            <input className="w-20 border rounded px-2 py-1"
+                              value={v._stock ?? v.stock ?? ""}
+                              onChange={(e) => setData(d => ({ ...d, variants: d.variants.map(x => x.id === v.id ? { ...x, _stock: e.target.value } : x) }))} />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input className="w-24 border rounded px-2 py-1"
+                              value={v._price ?? v.price ?? ""}
+                              onChange={(e) => setData(d => ({ ...d, variants: d.variants.map(x => x.id === v.id ? { ...x, _price: e.target.value } : x) }))} />
+                          </td>
+                          <td className="px-3 py-2">
+                            <button className="px-3 py-1 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+                              onClick={async () => {
+                                const payload = {
+                                  price: Number(v._price ?? v.price ?? 0),
+                                  stock: Number(v._stock ?? v.stock ?? 0)
+                                };
+                                await saveVariant(data.id, v.id, payload);
+                                setData(d => ({ ...d, variants: d.variants.map(x => x.id === v.id ? { ...x, price: payload.price, stock: payload.stock, _price: undefined, _stock: undefined } : x) }));
+                              }}>
+                              Kaydet
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -128,6 +152,14 @@ export default function ProductDetail() {
             </div>
           </div>}
         </div>
+      )}
+      {data && (
+        <BulkPriceModal
+          product={data}
+          open={!!bulkOpen}
+          onClose={()=> setBulkOpen(false)}
+          onDone={async ()=> { await refreshProduct(); }} // başarı sonrası listeyi tazele
+        />
       )}
     </WindsterLayout>
   );
