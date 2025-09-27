@@ -1,8 +1,9 @@
-using Ecom.Api.Services;
-using Ecom.Infrastructure.Data;
+﻿using Ecom.Api.Services;
 using Ecom.Application.Marketplaces;
+using Ecom.Infrastructure.Data;
 using Ecom.Infrastructure.Marketplaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -18,21 +19,22 @@ builder.Services.AddControllers().AddJsonOptions(opts =>
     opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
 });
 
-// CORS (geli�tirme i�in spesifik origin)
+// CORS (geliştirme için spesifik origin)
 const string CorsPolicy = "FrontendPolicy";
-builder.Services.AddCors(options =>
+var origins = builder.Configuration.GetSection("Frontend:Origins").Get<string[]>() ?? Array.Empty<string>();
+builder.Services.AddCors(opt =>
 {
-    options.AddPolicy(CorsPolicy, policy =>
-        policy
-            .WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials()
+    opt.AddPolicy(CorsPolicy, p => p
+        .WithOrigins(origins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()
     );
 });
 
 // Http & Cache
 builder.Services.AddHttpClient();
+builder.Services.Configure<TrendyolOptions>(builder.Configuration.GetSection("Trendyol"));
 builder.Services.AddHttpClient("Trendyol", c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient("Hepsiburada", c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient("N11", c => c.Timeout = TimeSpan.FromSeconds(30));
@@ -77,6 +79,42 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+});
+
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
+
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        // ModelState → { key: string, errors: string[] }
+        var errors = context.ModelState
+            .Where(kv => kv.Value is { Errors.Count: > 0 })
+            .ToDictionary(
+                kv => kv.Key,
+                kv => kv.Value!.Errors.Select(e => e.ErrorMessage).ToArray()
+            );
+
+        var problem = new ValidationProblemDetails(context.ModelState)
+        {
+            Title = "Validation Failed",
+            Status = StatusCodes.Status400BadRequest,
+            Type = "https://datatracker.ietf.org/doc/html/rfc7807",
+            Detail = "Request validation failed. See 'errors' for details."
+        };
+
+        // Ek alan: frontende kolay haritalansın
+        problem.Extensions["errors"] = errors;
+
+        return new BadRequestObjectResult(problem)
+        {
+            ContentTypes = { "application/problem+json" }
+        };
+    };
 });
 
 // DbContext

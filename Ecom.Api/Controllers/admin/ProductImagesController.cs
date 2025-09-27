@@ -1,6 +1,7 @@
 ﻿using Ecom.Api.Services;
 using Ecom.Domain.Entities;
 using Ecom.Infrastructure.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,7 +12,7 @@ namespace Ecom.Api.Controllers.admin
         [FromForm(Name = "file")]
         public IFormFile File { get; set; } = default!;
     }
-
+    [Authorize(Roles = "Admin,admin")]
     [ApiController]
     [Route("admin/products/{productId:guid}/images")]
     public class ProductImagesController : ControllerBase

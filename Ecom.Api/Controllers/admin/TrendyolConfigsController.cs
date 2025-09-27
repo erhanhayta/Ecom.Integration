@@ -2,11 +2,13 @@
 using Ecom.Domain.Entities;
 using Ecom.Domain.Marketplaces;
 using Ecom.Infrastructure.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecom.Api.Controllers.admin
 {
+    [Authorize(Roles = "Admin,admin")]
     [ApiController]
     [Route("admin/ty/{shopId:guid}/products/{productId:guid}")]
     public class TrendyolConfigsController : ControllerBase
