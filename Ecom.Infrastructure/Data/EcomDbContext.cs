@@ -17,8 +17,7 @@ namespace Ecom.Infrastructure.Data
         public DbSet<MarketplaceProductAttribute> MarketplaceProductAttributes => Set<MarketplaceProductAttribute>();
         public DbSet<MarketplaceVariantAttribute> MarketplaceVariantAttributes => Set<MarketplaceVariantAttribute>();
         public DbSet<MarketplaceAttributeMapping> MarketplaceAttributeMappings => Set<MarketplaceAttributeMapping>();
-
-
+        public DbSet<ProductImageLink> ProductImageLinks => Set<ProductImageLink>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -126,6 +125,31 @@ namespace Ecom.Infrastructure.Data
                  .HasForeignKey(pi => pi.ProductVariantId)
                  .OnDelete(DeleteBehavior.Restrict);   // <-- CASCADE değil; “multiple cascade paths” hatasını önler
             });
+
+            // YENİ: ProductImageLink
+            modelBuilder.Entity<ProductImageLink>(b =>
+            {
+                b.ToTable("ProductImageLinks");
+                b.HasKey(x => x.Id);
+
+                b.Property(x => x.SortOrder).HasDefaultValue(0);
+                b.Property(x => x.IsMain).HasDefaultValue(false);
+
+                // Image silinirse linkler de silinsin (CASCADE OK)
+                b.HasOne<ProductImage>()
+                 .WithMany()
+                 .HasForeignKey(x => x.ProductImageId)
+                 .OnDelete(DeleteBehavior.Cascade);
+
+                // Variant silinirse linkleri ELLE sileceğiz => Restrict/NoAction
+                b.HasOne<ProductVariant>()
+                 .WithMany()
+                 .HasForeignKey(x => x.ProductVariantId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                b.HasIndex(x => new { x.ProductId, x.ProductImageId, x.ProductVariantId }).IsUnique();
+            });
+
 
         }
     }

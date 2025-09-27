@@ -14,7 +14,7 @@ namespace Ecom.Infrastructure.Data.Configurations
             b.Property(x => x.CategoryName).HasMaxLength(200);
             b.Property(x => x.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
             b.Property(x => x.UpdatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()");
-
+            b.Property(x => x.CategoryPath).HasMaxLength(256);
             // Index’ler
             b.HasIndex(x => new { x.ProductId, x.ShopId, x.Firm }).IsUnique();
             b.HasIndex(x => x.CategoryId);

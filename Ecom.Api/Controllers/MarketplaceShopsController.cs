@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ecom.Api.Controllers
 {
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,admin")]
     [ApiController]
     [Route("admin/[controller]")]
     public class MarketplaceShopsController : ControllerBase

@@ -1,51 +1,21 @@
 ﻿using Ecom.Api.Services;
+using Ecom.Domain.Entities;
 using Ecom.Infrastructure.Data;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.DataAnnotations;
 
 namespace Ecom.Api.Controllers.admin
 {
-    public sealed class ProductImageUploadForm
+    public class ProductImageUploadForm
     {
-        [FromForm(Name = "file"), Required]
+        [FromForm(Name = "file")]
         public IFormFile File { get; set; } = default!;
-
-        [FromQuery(Name = "variantId")]
-        public Guid? VariantId { get; set; }
-
-        [FromForm(Name = "sortOrder")]
-        public int? SortOrder { get; set; }
-
-        [FromForm(Name = "isMain")]
-        public bool? IsMain { get; set; }
-    }
-
-    public sealed class ProductImageBulkUploadForm
-    {
-        [FromForm(Name = "files"), Required]
-        public List<IFormFile> Files { get; set; } = new();
-
-        [FromQuery(Name = "variantId")]
-        public Guid? VariantId { get; set; }
-
-        [FromForm(Name = "sortOrder")]
-        public int? SortOrder { get; set; }
-
-        [FromForm(Name = "isMain")]
-        public bool? IsMain { get; set; }
     }
 
     [ApiController]
     [Route("admin/products/{productId:guid}/images")]
     public class ProductImagesController : ControllerBase
     {
-        private static readonly HashSet<string> AllowedExts = new(StringComparer.OrdinalIgnoreCase)
-            { ".jpg", ".jpeg", ".png", ".webp" };
-
-        private const int MaxImagesPerBarcode = 8;
-
         private readonly EcomDbContext _db;
         private readonly ImageProcessingService _img;
 
@@ -54,131 +24,186 @@ namespace Ecom.Api.Controllers.admin
             _db = db; _img = img;
         }
 
+        // 1) Yükle: tek fiziksel dosya kaydı (ProductImages)
+        //    İstersek ürüne ilk link de oluşturabiliriz (linkToProduct=true)
         [HttpPost]
         [Consumes("multipart/form-data")]
         [RequestSizeLimit(50_000_000)]
         [RequestFormLimits(MultipartBodyLengthLimit = 50_000_000)]
         public async Task<IActionResult> Upload(
             Guid productId,
-            [FromQuery] Guid? variantId,
             [FromForm] ProductImageUploadForm form,
-            CancellationToken ct)
+            [FromQuery] bool linkToProduct = true,
+            [FromQuery] int sortOrder = 0,
+            [FromQuery] bool isMain = false,
+            CancellationToken ct = default)
         {
-            var prod = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId, ct);
-            if (prod is null) return NotFound("Product not found");
+            var prodExists = await _db.Products.AnyAsync(p => p.Id == productId, ct);
+            if (!prodExists) return NotFound("Product not found");
 
-            
-            var f = form.File;
-            if (f is null || f.Length == 0) return BadRequest("file missing");
-            if (!AllowedExts.Contains(Path.GetExtension(f.FileName)))
-                return BadRequest("Only jpg, jpeg, png, webp are allowed.");
+            var file = form.File;
+            if (file is null || file.Length == 0) return BadRequest("file missing");
 
-            var relPath = await SaveFileAsync(productId, f, ct);
-            var entity = new Ecom.Domain.Entities.ProductImage
+            var fileName = $"{Guid.NewGuid():N}.jpg";
+            var relDir = Path.Combine("uploads", "products", productId.ToString("N"));
+            var relPath = Path.Combine(relDir, fileName);
+            var absPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", relPath);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(absPath)!);
+            await using (var input = file.OpenReadStream())
+                await _img.ProcessAndSaveAsync(input, absPath, 1200, 1800, 96, ct);
+
+            var img = new ProductImage
             {
                 Id = Guid.NewGuid(),
                 ProductId = productId,
-                ProductVariantId = variantId,
-                FileName = Path.GetFileName(relPath),
-                Url = "/" + relPath.Replace("\\", "/"),
-                SortOrder = form.SortOrder ?? 0,
-                IsMain = form.IsMain ?? false
+                ProductVariantId = null, // yeni mimaride fiziksel kayıt varyantsız
+                FileName = fileName,
+                Url = "/" + relPath.Replace("\\", "/")
             };
-            _db.ProductImages.Add(entity);
+            _db.ProductImages.Add(img);
             await _db.SaveChangesAsync(ct);
 
-            // Not: URL relative; prod’da HTTPS altında servis edilecek.
-            return Ok(new { id = entity.Id, url = entity.Url, variantId = entity.ProductVariantId, sortOrder = entity.SortOrder, isMain = entity.IsMain });
-        }
-
-        [HttpPost("bulk")]
-        [Consumes("multipart/form-data")]
-        [RequestSizeLimit(200_000_000)]
-        [RequestFormLimits(MultipartBodyLengthLimit = 200_000_000)]
-        public async Task<IActionResult> UploadBulk(
-            Guid productId,
-            [FromQuery] Guid? variantId,
-            [FromForm] ProductImageBulkUploadForm form,
-            CancellationToken ct)
-        {
-            var prod = await _db.Products.FirstOrDefaultAsync(p => p.Id == productId, ct);
-            if (prod is null) return NotFound("Product not found");
-
-            if (form.Files == null || form.Files.Count == 0)
-                return BadRequest("files missing");
-
-            var results = new List<object>();
-            foreach (var f in form.Files)
+            // opsiyonel ilk link (ürüne)
+            if (linkToProduct)
             {
-                if (f == null || f.Length == 0) continue;
-                if (!AllowedExts.Contains(Path.GetExtension(f.FileName)))
-                    return BadRequest("Only jpg, jpeg, png, webp are allowed.");
-
-                var relPath = await SaveFileAsync(productId, f, ct);
-                var entity = new Ecom.Domain.Entities.ProductImage
+                var link = new ProductImageLink
                 {
                     Id = Guid.NewGuid(),
                     ProductId = productId,
-                    ProductVariantId = variantId,
-                    FileName = Path.GetFileName(relPath),
-                    Url = "/" + relPath.Replace("\\", "/"),
-                    SortOrder = form.SortOrder ?? 0,
-                    IsMain = form.IsMain ?? false
+                    ProductImageId = img.Id,
+                    ProductVariantId = null,
+                    SortOrder = sortOrder,
+                    IsMain = isMain,
+                    CreatedAtUtc = DateTime.UtcNow
                 };
-                _db.ProductImages.Add(entity);
-                results.Add(new { id = entity.Id, url = entity.Url, variantId = entity.ProductVariantId, sortOrder = entity.SortOrder, isMain = entity.IsMain });
+                _db.ProductImageLinks.Add(link);
+                await _db.SaveChangesAsync(ct);
+            }
+
+            return Ok(new { imageId = img.Id, url = img.Url });
+        }
+
+        // 2) Link oluştur: upload edilmiş imageId’leri ürüne/variantlara bağla
+        public sealed class LinkRequest
+        {
+            public List<Guid> ImageIds { get; set; } = new();
+            public bool LinkToProduct { get; set; } = false;
+            public List<Guid> VariantIds { get; set; } = new();
+            public int SortOrder { get; set; } = 0;
+            public bool IsMain { get; set; } = false;
+        }
+
+        [HttpPost("links")]
+        public async Task<IActionResult> CreateLinks(Guid productId, [FromBody] LinkRequest req, CancellationToken ct)
+        {
+            if (!req.ImageIds?.Any() ?? true) return BadRequest("ImageIds required");
+
+            var now = DateTime.UtcNow;
+
+            foreach (var imgId in (req.ImageIds ?? Enumerable.Empty<Guid>()).Distinct())
+            {
+                var exists = await _db.ProductImages.AnyAsync(i => i.Id == imgId && i.ProductId == productId, ct);
+                if (!exists) return BadRequest($"ImageId not belongs to product: {imgId}");
+
+                if (req.LinkToProduct)
+                {
+                    _db.ProductImageLinks.Add(new ProductImageLink
+                    {
+                        Id = Guid.NewGuid(),
+                        ProductId = productId,
+                        ProductImageId = imgId,
+                        ProductVariantId = null,
+                        SortOrder = req.SortOrder,
+                        IsMain = req.IsMain,
+                        CreatedAtUtc = now
+                    });
+                }
+
+                foreach (var vid in (req.VariantIds ?? new()).Distinct())
+                {
+                    var vExists = await _db.ProductVariants.AnyAsync(v => v.Id == vid && v.ProductId == productId, ct);
+                    if (!vExists) return BadRequest($"Variant not found: {vid}");
+
+                    _db.ProductImageLinks.Add(new ProductImageLink
+                    {
+                        Id = Guid.NewGuid(),
+                        ProductId = productId,
+                        ProductImageId = imgId,
+                        ProductVariantId = vid,
+                        SortOrder = req.SortOrder,
+                        IsMain = false,
+                        CreatedAtUtc = now
+                    });
+                }
             }
 
             await _db.SaveChangesAsync(ct);
-            return Ok(results);
+            return Ok();
         }
+
+        // 3) Link sil (dosyayı değil, bağlantıyı sil)
+        //    Eğer bu image için hiç link kalmazsa fiziksel dosyayı ve ProductImage kaydını da sil
+        [HttpDelete("links/{linkId:guid}")]
+        public async Task<IActionResult> DeleteLink(Guid productId, Guid linkId, CancellationToken ct)
+        {
+            var link = await _db.ProductImageLinks
+                .FirstOrDefaultAsync(x => x.Id == linkId && x.ProductId == productId, ct);
+            if (link is null) return NotFound();
+
+            var imgId = link.ProductImageId;
+            _db.ProductImageLinks.Remove(link);
+            await _db.SaveChangesAsync(ct);
+
+            var hasMore = await _db.ProductImageLinks.AnyAsync(x => x.ProductImageId == imgId, ct);
+            if (!hasMore)
+            {
+                var img = await _db.ProductImages.FirstOrDefaultAsync(x => x.Id == imgId, ct);
+                if (img != null)
+                {
+                    var absPath = Path.Combine(
+                        Directory.GetCurrentDirectory(), "wwwroot",
+                        img.Url.TrimStart('/').Replace("/", Path.DirectorySeparatorChar.ToString())
+                    );
+                    if (System.IO.File.Exists(absPath))
+                        System.IO.File.Delete(absPath);
+
+                    _db.ProductImages.Remove(img);
+                    await _db.SaveChangesAsync(ct);
+                }
+            }
+
+            return NoContent();
+        }
+
 
         [HttpGet]
         public async Task<IActionResult> List(Guid productId, [FromQuery] Guid? variantId, CancellationToken ct = default)
         {
-            var q = _db.ProductImages.AsNoTracking().Where(x => x.ProductId == productId);
-            if (variantId.HasValue) q = q.Where(x => x.ProductVariantId == variantId.Value);
-            else q = q.OrderBy(x => x.SortOrder);
+            var q =
+                from l in _db.ProductImageLinks.AsNoTracking()
+                where l.ProductId == productId
+                join i in _db.ProductImages.AsNoTracking() on l.ProductImageId equals i.Id
+                select new
+                {
+                    linkId = l.Id,
+                    imageId = i.Id,
+                    url = i.Url,
+                    sortOrder = l.SortOrder,
+                    isMain = l.IsMain,
+                    productVariantId = l.ProductVariantId
+                };
 
-            var list = await q.Select(x => new { x.Id, x.Url, x.SortOrder, x.IsMain, x.ProductVariantId }).ToListAsync(ct);
+            // Varyant görünümünde artık ürün (null) linkleri gelmesin:
+            if (variantId.HasValue)
+                q = q.Where(x => x.productVariantId == variantId.Value);
+            else
+                q = q.Where(x => x.productVariantId == null);
+
+            var list = await q.OrderBy(x => x.sortOrder).ToListAsync(ct);
             return Ok(list);
         }
 
-        [HttpDelete("{imageId:guid}")]
-        public async Task<IActionResult> Delete(Guid productId, Guid imageId, CancellationToken ct)
-        {
-            var img = await _db.ProductImages.FirstOrDefaultAsync(x => x.Id == imageId && x.ProductId == productId, ct);
-            if (img == null) return NotFound();
-
-            var absPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", img.Url.TrimStart('/').Replace("/", Path.DirectorySeparatorChar.ToString()));
-            if (System.IO.File.Exists(absPath)) System.IO.File.Delete(absPath);
-
-            _db.ProductImages.Remove(img);
-            await _db.SaveChangesAsync(ct);
-            return NoContent();
-        }
-
-        // ---- Helpers ----
-        private async Task<string> SaveFileAsync(Guid productId, IFormFile f, CancellationToken ct)
-        {
-            // Girdi uzantısını sadece kabul/ret için kullanıyoruz; çıktı HER ZAMAN .jpg
-            var inputExt = Path.GetExtension(f.FileName);
-            if (string.IsNullOrWhiteSpace(inputExt) ||
-                !new[] { ".jpg", ".jpeg", ".png", ".webp" }.Contains(inputExt, StringComparer.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Only jpg, jpeg, png, webp are allowed.");
-
-            var relDir = Path.Combine("uploads", "products", productId.ToString("N"));
-            var absDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", relDir);
-            Directory.CreateDirectory(absDir);
-
-            var fileName = $"{Guid.NewGuid():N}.jpg"; // <-- ÇIKTI UZANTISI SABİT .jpg
-            var relPath = Path.Combine(relDir, fileName);
-            var absPath = Path.Combine(absDir, fileName);
-
-            await using var input = f.OpenReadStream();
-            await _img.ProcessAndSaveAsync(input, absPath, 1200, 1800, 85, ct); // 96 DPI servis içinde
-            return relPath;
-        }
 
     }
 }

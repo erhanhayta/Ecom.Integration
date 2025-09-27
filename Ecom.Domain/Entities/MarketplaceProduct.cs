@@ -14,6 +14,7 @@ namespace Ecom.Domain.Entities
         public int Firm { get; set; }
         public int CategoryId { get; set; }
         public string? CategoryName { get; set; }
+        public string? CategoryPath { get; set; }
         public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 
