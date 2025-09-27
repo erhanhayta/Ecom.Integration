@@ -9,6 +9,8 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Text.Json.Serialization;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +20,16 @@ builder.Services.AddControllers().AddJsonOptions(opts =>
     opts.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     opts.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
 });
+
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
+
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssemblyContaining<Ecom.Application.Products.Validators.CreateProductRequestValidator>();
 
 // CORS (geliştirme için spesifik origin)
 const string CorsPolicy = "FrontendPolicy";
@@ -31,6 +43,7 @@ builder.Services.AddCors(opt =>
         .AllowCredentials()
     );
 });
+builder.Services.AddValidatorsFromAssemblyContaining<Ecom.Application.Products.Validators.CreateProductRequestValidator>();
 
 // Http & Cache
 builder.Services.AddHttpClient();

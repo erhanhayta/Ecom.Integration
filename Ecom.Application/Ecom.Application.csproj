@@ -11,4 +11,8 @@
     <ProjectReference Include="..\Ecom.Domain\Ecom.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.0.0" />
+  </ItemGroup>
+
 </Project>

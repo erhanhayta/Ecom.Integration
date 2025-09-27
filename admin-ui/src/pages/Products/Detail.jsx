@@ -17,7 +17,7 @@ export default function ProductDetail() {
   const [imagesKey, setImagesKey] = useState(0); // galeri yenileme tetikleyici
   const [bulkOpen, setBulkOpen] = useState(false); // +++ modal state
   const saveVariant = (pid, vid, payload) =>
-    api(`/admin/products/${pid}/variants/${vid}`, { method: "PATCH", body: payload });  
+    api(`/admin/products/${pid}/variants/${vid}`, { method: "PATCH", body: payload });
 
   const [tyState, setTyState] = useState(null);
   // const [variantState, setVariantState] = useState(null);
@@ -27,10 +27,11 @@ export default function ProductDetail() {
   }
   useEffect(() => {
     (async () => {
-      try { setData(await api(`/admin/products/${id}`)); }
+      try { setData(await api(`/admin/products/${id}?includeVariants=true`)); }
       catch (e) { setMsg(e.message); }
     })();
   }, [id]);
+
 
   const productImages = useMemo(() => {
     if (!data) return [];
@@ -48,8 +49,14 @@ export default function ProductDetail() {
   }, [data]);
 
   async function refreshProduct() {
-    try { setData(await api(`/admin/products/${id}`)); } catch { }
+    try {
+      const res = await api(`/admin/products/${id}?includeVariants=true`);
+      setData(res);
+    } catch (err) {
+      console.error("Ürün bilgisi alınırken hata:", err);
+    }
   }
+
 
   return (
     <WindsterLayout>
@@ -104,7 +111,7 @@ export default function ProductDetail() {
                           <td className="px-3 py-2">{v.color}</td>
                           <td className="px-3 py-2">{v.size}</td>
                           <td className="px-3 py-2">{v.sku}</td>
-                          <td className="px-3 py-2">{v.barcode}</td>                          
+                          <td className="px-3 py-2">{v.barcode}</td>
                           <td className="px-3 py-2">
                             <input className="w-20 border rounded px-2 py-1"
                               value={v._stock ?? v.stock ?? ""}
@@ -157,8 +164,8 @@ export default function ProductDetail() {
         <BulkPriceModal
           product={data}
           open={!!bulkOpen}
-          onClose={()=> setBulkOpen(false)}
-          onDone={async ()=> { await refreshProduct(); }} // başarı sonrası listeyi tazele
+          onClose={() => setBulkOpen(false)}
+          onDone={async () => { await refreshProduct(); }} // başarı sonrası listeyi tazele
         />
       )}
     </WindsterLayout>

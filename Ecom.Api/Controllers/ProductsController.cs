@@ -1,4 +1,5 @@
-﻿using Ecom.Domain.Entities;
+﻿using Ecom.Application.Products.Request;
+using Ecom.Domain.Entities;
 using Ecom.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,9 +32,8 @@ namespace Ecom.Api.Controllers
         // --- Listeleme: sade, variants DÖNMEZ ---
         // GET /admin/products
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll(CancellationToken ct)
         {
-            // Projeksiyon -> DTO (navigation yok, serialize edilmez)
             var list = await _db.Products
                 .AsNoTracking()
                 .OrderByDescending(p => p.CreatedAtUtc)
@@ -41,7 +41,7 @@ namespace Ecom.Api.Controllers
                     p.Id,
                     p.Name,
                     p.ProductCode,
-                    p.Barcode,
+                    p.Barcode ?? "",
                     p.Brand,
                     p.BasePrice,
                     p.TaxRate,
@@ -49,67 +49,63 @@ namespace Ecom.Api.Controllers
                     p.IsActive,
                     p.CreatedAtUtc
                 ))
-                .ToListAsync();
+                .ToListAsync(ct);
 
             return Ok(list);
         }
 
-        // --- Detay: variants İLE birlikte ---
-        // GET /admin/products/{id}
+        // --- Detay: tek endpoint — query ile dallanır ---
+        // GET /admin/products/{id}?includeVariants=true|false
         [HttpGet("{id:guid}")]
-        public async Task<IActionResult> Get(Guid id)
+        public async Task<IActionResult> Get(Guid id, [FromQuery] bool includeVariants = false, CancellationToken ct = default)
         {
-            var item = await _db.Products
-                .Include(p => p.Variants)       // <-- varyantları da getir
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == id);
+            IQueryable<Product> q = _db.Products.AsNoTracking();
 
+            if (includeVariants)
+                q = q.Include(p => p.Variants);
+
+            var item = await q.FirstOrDefaultAsync(p => p.Id == id, ct);
             return item is null ? NotFound() : Ok(item);
         }
 
         // POST /admin/products
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] Product dto)
+        public async Task<IActionResult> Create([FromBody] CreateProductRequest req, CancellationToken ct)
         {
-            dto.Id = Guid.NewGuid();
-            dto.CreatedAtUtc = DateTime.UtcNow;
-            dto.UpdatedAtUtc = null;
+            var entity = new Product
+            {
+                Name = req.Name.Trim(),
+                ProductCode = req.ProductCode.Trim(),
+                Barcode = req.Barcode?.Trim(),
+                Brand = req.Brand?.Trim(),
+                BasePrice = req.BasePrice,
+                TaxRate = req.TaxRate,
+                IsActive = req.IsActive
+            };
 
-            _db.Products.Add(dto);
-            await _db.SaveChangesAsync();
-            return CreatedAtAction(nameof(Get), new { id = dto.Id }, dto);
+            _db.Products.Add(entity);
+            await _db.SaveChangesAsync(ct);
+
+            // Tek detay endpoint'i: nameof(Get)
+            return CreatedAtAction(nameof(Get), new { id = entity.Id }, new { id = entity.Id });
         }
 
         // PUT /admin/products/{id}
         [HttpPut("{id:guid}")]
-        public async Task<IActionResult> Update(Guid id, [FromBody] Product dto)
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductRequest req, CancellationToken ct)
         {
-            var existing = await _db.Products.FindAsync(id);
-            if (existing is null) return NotFound();
+            var entity = await _db.Products.FindAsync(new object?[] { id }, ct);
+            if (entity is null) return NotFound();
 
-            existing.Name = dto.Name;
-            existing.ProductCode = dto.ProductCode;
-            existing.Barcode = dto.Barcode;
-            existing.Description = dto.Description;
-            existing.Brand = dto.Brand;
-            existing.BasePrice = dto.BasePrice;
-            existing.TaxRate = dto.TaxRate;
-            existing.IsActive = dto.IsActive;
-            existing.UpdatedAtUtc = DateTime.UtcNow;
+            entity.Name = req.Name.Trim();
+            entity.ProductCode = req.ProductCode.Trim();
+            entity.Barcode = req.Barcode?.Trim();
+            entity.Brand = req.Brand?.Trim();
+            entity.BasePrice = req.BasePrice;
+            entity.TaxRate = req.TaxRate;
+            entity.IsActive = req.IsActive;
 
-            await _db.SaveChangesAsync();
-            return NoContent();
-        }
-
-        // DELETE /admin/products/{id}
-        [HttpDelete("{id:guid}")]
-        public async Task<IActionResult> Delete(Guid id)
-        {
-            var existing = await _db.Products.FindAsync(id);
-            if (existing is null) return NotFound();
-
-            _db.Products.Remove(existing);
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(ct);
             return NoContent();
         }
     }
